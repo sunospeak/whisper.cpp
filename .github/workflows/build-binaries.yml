@@ -4,12 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       version_tag:
-        description: 'Version tag for release (e.g., v1.0.0)'
+        description: "Version tag for release (e.g., v1.0.0)"
         required: true
         type: string
   push:
     tags:
-      - 'SunoSpeak-*'
+      - "v*"
 
 permissions:
   contents: write
@@ -19,7 +19,7 @@ env:
 
 jobs:
   build-macos-arm64:
-    runs-on: macos-14  # M1 runner
+    runs-on: macos-14 # Apple Silicon runner
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,7 +29,7 @@ jobs:
         with:
           key: macos-arm64
 
-      - name: Build whisper.cpp
+      - name: Build whisper.cpp (Metal)
         run: |
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Release \
@@ -38,7 +38,7 @@ jobs:
             -DWHISPER_METAL=ON \
             -DGGML_METAL=ON \
             -DBUILD_SHARED_LIBS=OFF
-          cmake --build build --config Release -j $(sysctl -n hw.logicalcpu)
+          cmake --build build --config Release -j "$(sysctl -n hw.logicalcpu)"
 
       - name: Package binaries
         run: |
@@ -47,9 +47,10 @@ jobs:
           chmod +x dist/whisper-cpp-darwin-arm64
           cp build/bin/whisper-server dist/whisper-server-darwin-arm64
           chmod +x dist/whisper-server-darwin-arm64
+          cp LICENSE dist/ || true
           cd dist
-          zip whisper-cpp-darwin-arm64.zip whisper-cpp-darwin-arm64
-          zip whisper-server-darwin-arm64.zip whisper-server-darwin-arm64
+          zip -r whisper-cpp-darwin-arm64.zip whisper-cpp-darwin-arm64 LICENSE
+          zip -r whisper-server-darwin-arm64.zip whisper-server-darwin-arm64 LICENSE
 
       - name: Upload whisper-cli artifact
         uses: actions/upload-artifact@v4
@@ -64,7 +65,7 @@ jobs:
           path: dist/whisper-server-darwin-arm64.zip
 
   build-macos-x64:
-    runs-on: macos-14  # Cross-compile for x64 on arm64 runner
+    runs-on: macos-13 # Intel runner (more reliable than cross-compiling)
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -74,18 +75,17 @@ jobs:
         with:
           key: macos-x64
 
-      - name: Build whisper.cpp for x64
+      - name: Build whisper.cpp (CPU-only)
         run: |
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_OSX_ARCHITECTURES=x86_64 \
             -DWHISPER_METAL=OFF \
             -DGGML_METAL=OFF \
             -DGGML_NATIVE=OFF \
             -DBUILD_SHARED_LIBS=OFF
-          cmake --build build --config Release -j $(sysctl -n hw.logicalcpu)
+          cmake --build build --config Release -j "$(sysctl -n hw.logicalcpu)"
 
       - name: Package binaries
         run: |
@@ -94,9 +94,10 @@ jobs:
           chmod +x dist/whisper-cpp-darwin-x64
           cp build/bin/whisper-server dist/whisper-server-darwin-x64
           chmod +x dist/whisper-server-darwin-x64
+          cp LICENSE dist/ || true
           cd dist
-          zip whisper-cpp-darwin-x64.zip whisper-cpp-darwin-x64
-          zip whisper-server-darwin-x64.zip whisper-server-darwin-x64
+          zip -r whisper-cpp-darwin-x64.zip whisper-cpp-darwin-x64 LICENSE
+          zip -r whisper-server-darwin-x64.zip whisper-server-darwin-x64 LICENSE
 
       - name: Upload whisper-cli artifact
         uses: actions/upload-artifact@v4
@@ -116,7 +117,6 @@ jobs:
       - name: Free up disk space
         shell: pwsh
         run: |
-          # Remove unnecessary tools to free up disk space
           Remove-Item -Recurse -Force "C:\hostedtoolcache\CodeQL" -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force "C:\hostedtoolcache\Java*" -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force "C:\hostedtoolcache\go" -ErrorAction SilentlyContinue
@@ -131,7 +131,7 @@ jobs:
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Setup ccache
+      - name: Setup ccache (sccache)
         uses: hendrikmuhs/ccache-action@v1
         with:
           key: windows-x64-cpu
@@ -153,12 +153,14 @@ jobs:
       - name: Package binaries
         shell: pwsh
         run: |
-          mkdir dist
+          New-Item -ItemType Directory -Force dist | Out-Null
           Copy-Item build\bin\Release\whisper-cli.exe dist\whisper-cpp-win32-x64-cpu.exe
           Copy-Item build\bin\Release\whisper-server.exe dist\whisper-server-win32-x64-cpu.exe
+          if (Test-Path LICENSE) { Copy-Item LICENSE dist\LICENSE.txt }
+
           Set-Location dist
-          Compress-Archive -Path whisper-cpp-win32-x64-cpu.exe -DestinationPath whisper-cpp-win32-x64-cpu.zip
-          Compress-Archive -Path whisper-server-win32-x64-cpu.exe -DestinationPath whisper-server-win32-x64-cpu.zip
+          Compress-Archive -Path whisper-cpp-win32-x64-cpu.exe,LICENSE.txt -DestinationPath whisper-cpp-win32-x64-cpu.zip -Force
+          Compress-Archive -Path whisper-server-win32-x64-cpu.exe,LICENSE.txt -DestinationPath whisper-server-win32-x64-cpu.zip -Force
 
       - name: Upload whisper-cli artifact
         uses: actions/upload-artifact@v4
@@ -178,7 +180,6 @@ jobs:
       - name: Free up disk space
         shell: pwsh
         run: |
-          # Remove unnecessary tools to free up disk space
           Remove-Item -Recurse -Force "C:\hostedtoolcache\CodeQL" -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force "C:\hostedtoolcache\Java*" -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force "C:\hostedtoolcache\go" -ErrorAction SilentlyContinue
@@ -190,13 +191,13 @@ jobs:
       - name: Install Ninja
         run: choco install ninja -y
 
-      - name: Install CUDA Toolkit 12.4.0
+      - name: Install CUDA Toolkit 12.4.0 (minimal from NVIDIA redist)
+        shell: pwsh
         run: |
           $CUDA_VERSION = "12.4.0"
           $CUDA_TOOLKIT_DIR = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v$CUDA_VERSION"
           $CUDA_DOWNLOAD = "https://developer.download.nvidia.com/compute/cuda/redist"
 
-          # Component versions for CUDA 12.4.0
           $CUDART_VER   = "12.4.127"
           $NVCC_VER     = "12.4.131"
           $NVRTC_VER    = "12.4.127"
@@ -206,13 +207,9 @@ jobs:
           $VS_VER       = "12.4.127"
           $CCCL_VER     = "12.4.127"
 
-          # Create CUDA toolkit directory
-          New-Item -ItemType Directory -Force -Path $CUDA_TOOLKIT_DIR
-
-          # Install unzip
+          New-Item -ItemType Directory -Force -Path $CUDA_TOOLKIT_DIR | Out-Null
           choco install unzip -y
 
-          # Download CUDA components from official NVIDIA CDN
           curl -O "$CUDA_DOWNLOAD/cuda_cudart/windows-x86_64/cuda_cudart-windows-x86_64-${CUDART_VER}-archive.zip"
           curl -O "$CUDA_DOWNLOAD/cuda_nvcc/windows-x86_64/cuda_nvcc-windows-x86_64-${NVCC_VER}-archive.zip"
           curl -O "$CUDA_DOWNLOAD/cuda_nvrtc/windows-x86_64/cuda_nvrtc-windows-x86_64-${NVRTC_VER}-archive.zip"
@@ -222,10 +219,8 @@ jobs:
           curl -O "$CUDA_DOWNLOAD/visual_studio_integration/windows-x86_64/visual_studio_integration-windows-x86_64-${VS_VER}-archive.zip"
           curl -O "$CUDA_DOWNLOAD/cuda_cccl/windows-x86_64/cuda_cccl-windows-x86_64-${CCCL_VER}-archive.zip"
 
-          # Extract all components
           unzip -q '*.zip' -d $CUDA_TOOLKIT_DIR
 
-          # Copy extracted files to CUDA toolkit directory
           xcopy "$CUDA_TOOLKIT_DIR\cuda_cudart-windows-x86_64-${CUDART_VER}-archive\*" "$CUDA_TOOLKIT_DIR" /E /I /H /Y
           xcopy "$CUDA_TOOLKIT_DIR\cuda_nvcc-windows-x86_64-${NVCC_VER}-archive\*" "$CUDA_TOOLKIT_DIR" /E /I /H /Y
           xcopy "$CUDA_TOOLKIT_DIR\cuda_nvrtc-windows-x86_64-${NVRTC_VER}-archive\*" "$CUDA_TOOLKIT_DIR" /E /I /H /Y
@@ -235,7 +230,6 @@ jobs:
           xcopy "$CUDA_TOOLKIT_DIR\cuda_cccl-windows-x86_64-${CCCL_VER}-archive\*" "$CUDA_TOOLKIT_DIR" /E /I /H /Y
           xcopy "$CUDA_TOOLKIT_DIR\visual_studio_integration-windows-x86_64-${VS_VER}-archive\visual_studio_integration\MSBuildExtensions\*" "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Microsoft\VC\v170\BuildCustomizations" /E /I /H /Y
 
-          # Set environment variables
           echo "$CUDA_TOOLKIT_DIR\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           echo "CUDA_PATH=$CUDA_TOOLKIT_DIR" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
@@ -245,13 +239,13 @@ jobs:
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Setup ccache
+      - name: Setup ccache (sccache)
         uses: hendrikmuhs/ccache-action@v1
         with:
           key: windows-x64-cuda
           variant: sccache
 
-      - name: Build whisper.cpp with CUDA
+      - name: Build whisper.cpp (CUDA)
         shell: cmd
         run: |
           cmake -S . -B build -G "Ninja Multi-Config" ^
@@ -271,43 +265,33 @@ jobs:
         shell: pwsh
         run: |
           $CUDA_PATH = $env:CUDA_PATH
-          mkdir dist
+          New-Item -ItemType Directory -Force dist | Out-Null
 
-          # Copy main binaries
           Copy-Item build\bin\Release\whisper-cli.exe dist\whisper-cpp-win32-x64-cuda.exe
           Copy-Item build\bin\Release\whisper-server.exe dist\whisper-server-win32-x64-cuda.exe
+          if (Test-Path LICENSE) { Copy-Item LICENSE dist\LICENSE.txt }
 
-          # Required CUDA runtime DLLs for GPU acceleration
           $cudaDlls = @("cudart64_12.dll", "cublas64_12.dll", "cublasLt64_12.dll")
           $bundledDlls = @()
-
           foreach ($dll in $cudaDlls) {
             $dllPath = Join-Path $CUDA_PATH "bin\$dll"
             if (Test-Path $dllPath) {
-              Write-Host "Bundling $dll"
               Copy-Item $dllPath dist\
               $bundledDlls += $dll
-            } else {
-              Write-Host "Warning: $dll not found at $dllPath"
             }
           }
 
-          Write-Host "Contents of dist folder:"
-          Get-ChildItem dist | Format-Table Name, Length
-
-          # Fail if no CUDA DLLs were bundled
           if ($bundledDlls.Count -eq 0) {
             Write-Error "No CUDA DLLs were bundled. Build failed."
             exit 1
           }
 
-          # Create zip archives with dynamically built file lists
           Set-Location dist
-          $cliFiles = @("whisper-cpp-win32-x64-cuda.exe") + $bundledDlls
-          $serverFiles = @("whisper-server-win32-x64-cuda.exe") + $bundledDlls
+          $cliFiles = @("whisper-cpp-win32-x64-cuda.exe","LICENSE.txt") + $bundledDlls
+          $serverFiles = @("whisper-server-win32-x64-cuda.exe","LICENSE.txt") + $bundledDlls
 
-          Compress-Archive -Path $cliFiles -DestinationPath whisper-cpp-win32-x64-cuda.zip
-          Compress-Archive -Path $serverFiles -DestinationPath whisper-server-win32-x64-cuda.zip
+          Compress-Archive -Path $cliFiles -DestinationPath whisper-cpp-win32-x64-cuda.zip -Force
+          Compress-Archive -Path $serverFiles -DestinationPath whisper-server-win32-x64-cuda.zip -Force
 
       - name: Upload whisper-cli artifact
         uses: actions/upload-artifact@v4
@@ -326,7 +310,6 @@ jobs:
     steps:
       - name: Free up disk space
         run: |
-          # Remove unnecessary tools to free up disk space for builds
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /opt/ghc
@@ -355,7 +338,7 @@ jobs:
             -DBUILD_SHARED_LIBS=OFF \
             -DGGML_NATIVE=OFF \
             -DGGML_CUDA=OFF
-          cmake --build build --config Release -j $(nproc)
+          cmake --build build --config Release -j "$(nproc)"
 
       - name: Package binaries
         run: |
@@ -364,9 +347,10 @@ jobs:
           chmod +x dist/whisper-cpp-linux-x64-cpu
           cp build/bin/whisper-server dist/whisper-server-linux-x64-cpu
           chmod +x dist/whisper-server-linux-x64-cpu
+          cp LICENSE dist/ || true
           cd dist
-          zip whisper-cpp-linux-x64-cpu.zip whisper-cpp-linux-x64-cpu
-          zip whisper-server-linux-x64-cpu.zip whisper-server-linux-x64-cpu
+          zip -r whisper-cpp-linux-x64-cpu.zip whisper-cpp-linux-x64-cpu LICENSE
+          zip -r whisper-server-linux-x64-cpu.zip whisper-server-linux-x64-cpu LICENSE
 
       - name: Upload whisper-cli artifact
         uses: actions/upload-artifact@v4
@@ -385,7 +369,6 @@ jobs:
     steps:
       - name: Free up disk space
         run: |
-          # Remove unnecessary tools to free up disk space for CUDA build
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /opt/ghc
@@ -402,18 +385,14 @@ jobs:
 
       - name: Install CUDA Toolkit 12.4
         run: |
-          # Download and install CUDA keyring
           wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
           sudo dpkg -i cuda-keyring_1.1-1_all.deb
           sudo apt-get update
-
-          # Install minimal CUDA toolkit (compiler and libraries only, no driver)
           sudo apt-get install -y cuda-toolkit-12-4
 
-          # Set environment variables
-          echo "/usr/local/cuda-12.4/bin" >> $GITHUB_PATH
-          echo "CUDA_PATH=/usr/local/cuda-12.4" >> $GITHUB_ENV
-          echo "LD_LIBRARY_PATH=/usr/local/cuda-12.4/lib64:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+          echo "/usr/local/cuda-12.4/bin" >> "$GITHUB_PATH"
+          echo "CUDA_PATH=/usr/local/cuda-12.4" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=/usr/local/cuda-12.4/lib64:$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
 
       - name: Verify CUDA installation
         run: |
@@ -425,7 +404,7 @@ jobs:
         with:
           key: linux-x64-cuda
 
-      - name: Build whisper.cpp with CUDA
+      - name: Build whisper.cpp (CUDA)
         run: |
           export PATH=/usr/local/cuda-12.4/bin:$PATH
           export CUDA_PATH=/usr/local/cuda-12.4
@@ -438,7 +417,7 @@ jobs:
             -DGGML_CUDA=ON \
             -DCMAKE_CUDA_COMPILER=/usr/local/cuda-12.4/bin/nvcc \
             -DCMAKE_CUDA_ARCHITECTURES="${{ env.CUDA_ARCHITECTURES }}"
-          cmake --build build --config Release -j $(nproc)
+          cmake --build build --config Release -j "$(nproc)"
 
       - name: Package binaries
         run: |
@@ -447,9 +426,10 @@ jobs:
           chmod +x dist/whisper-cpp-linux-x64-cuda
           cp build/bin/whisper-server dist/whisper-server-linux-x64-cuda
           chmod +x dist/whisper-server-linux-x64-cuda
+          cp LICENSE dist/ || true
           cd dist
-          zip whisper-cpp-linux-x64-cuda.zip whisper-cpp-linux-x64-cuda
-          zip whisper-server-linux-x64-cuda.zip whisper-server-linux-x64-cuda
+          zip -r whisper-cpp-linux-x64-cuda.zip whisper-cpp-linux-x64-cuda LICENSE
+          zip -r whisper-server-linux-x64-cuda.zip whisper-server-linux-x64-cuda LICENSE
 
       - name: Upload whisper-cli artifact
         uses: actions/upload-artifact@v4
@@ -464,7 +444,15 @@ jobs:
           path: dist/whisper-server-linux-x64-cuda.zip
 
   create-release:
-    needs: [build-macos-arm64, build-macos-x64, build-windows-x64-cpu, build-windows-x64-cuda, build-linux-x64-cpu, build-linux-x64-cuda]
+    needs:
+      [
+        build-macos-arm64,
+        build-macos-x64,
+        build-windows-x64-cpu,
+        build-windows-x64-cuda,
+        build-linux-x64-cpu,
+        build-linux-x64-cuda,
+      ]
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
@@ -474,7 +462,7 @@ jobs:
 
       - name: Prepare release files
         run: |
-          mkdir release
+          mkdir -p release
           mv artifacts/whisper-cpp-darwin-arm64/whisper-cpp-darwin-arm64.zip release/
           mv artifacts/whisper-cpp-darwin-x64/whisper-cpp-darwin-x64.zip release/
           mv artifacts/whisper-cpp-win32-x64-cpu/whisper-cpp-win32-x64-cpu.zip release/
@@ -488,6 +476,12 @@ jobs:
           mv artifacts/whisper-server-linux-x64-cpu/whisper-server-linux-x64-cpu.zip release/
           mv artifacts/whisper-server-linux-x64-cuda/whisper-server-linux-x64-cuda.zip release/
           ls -la release/
+
+      - name: Create SHA256 checksums
+        run: |
+          cd release
+          sha256sum *.zip > SHA256SUMS.txt
+          cat SHA256SUMS.txt
 
       - name: Determine version
         id: version
@@ -537,6 +531,9 @@ jobs:
 
             ## Supported NVIDIA GPUs
             Compute capabilities 7.5+ (RTX 2000 series through RTX 40 series)
+
+            ## Checksums
+            See `SHA256SUMS.txt` in the release assets.
           files: release/*
           draft: false
           prerelease: false
