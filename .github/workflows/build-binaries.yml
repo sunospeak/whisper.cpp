@@ -75,17 +75,21 @@ jobs:
         with:
           key: macos-x64
 
-      - name: Build whisper.cpp (CPU-only)
+      - name: Build whisper.cpp (CPU-only, x86_64)
         run: |
+          SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+          export SDKROOT
+
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_OSX_ARCHITECTURES=x86_64 \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 \
             -DWHISPER_METAL=OFF \
             -DGGML_METAL=OFF \
             -DGGML_NATIVE=OFF \
+            -DGGML_BLAS=OFF \
             -DBUILD_SHARED_LIBS=OFF
           cmake --build build --config Release -j "$(sysctl -n hw.logicalcpu)"
 
