@@ -29,7 +29,7 @@ jobs:
         with:
           key: macos-arm64
 
-      - name: Build whisper.cpp (Metal)
+      - name: Build whisper.cpp (Metal + CoreML)
         run: |
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Release \
@@ -37,8 +37,14 @@ jobs:
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DWHISPER_METAL=ON \
             -DGGML_METAL=ON \
+            -DWHISPER_COREML=ON \
+            -DWHISPER_COREML_ALLOW_FALLBACK=ON \
             -DBUILD_SHARED_LIBS=OFF
           cmake --build build --config Release -j "$(sysctl -n hw.logicalcpu)"
+
+      - name: Verify CoreML linkage (arm64 whisper-server)
+        run: |
+          otool -L build/bin/whisper-server | grep -i CoreML
 
       - name: Package binaries
         run: |
@@ -75,7 +81,7 @@ jobs:
         with:
           key: macos-x64
 
-      - name: Build whisper.cpp (CPU-only, x86_64)
+      - name: Build whisper.cpp (x86_64 + CoreML fallback)
         run: |
           SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
           export SDKROOT
@@ -88,10 +94,16 @@ jobs:
             -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 \
             -DWHISPER_METAL=OFF \
             -DGGML_METAL=OFF \
+            -DWHISPER_COREML=ON \
+            -DWHISPER_COREML_ALLOW_FALLBACK=ON \
             -DGGML_NATIVE=OFF \
             -DGGML_BLAS=OFF \
             -DBUILD_SHARED_LIBS=OFF
           cmake --build build --config Release -j "$(sysctl -n hw.logicalcpu)"
+
+      - name: Verify CoreML linkage (x64 whisper-server)
+        run: |
+          otool -L build/bin/whisper-server | grep -i CoreML
 
       - name: Package binaries
         run: |
@@ -507,22 +519,22 @@ jobs:
             Pre-built whisper.cpp binaries for SunoSpeak. CPU and CUDA variants are included.
 
             ## GPU Acceleration
-            - **macOS ARM64**: Metal GPU acceleration (M1/M2/M3/M4)
+            - **macOS ARM64**: Metal + CoreML (with fallback)
             - **Windows x64**: NVIDIA CUDA build (bundled DLLs) and CPU build
             - **Linux x64**: NVIDIA CUDA build (requires system CUDA) and CPU build
-            - **macOS x64**: CPU only (Intel Macs)
+            - **macOS x64**: CoreML-enabled build with CPU fallback (Intel Macs)
 
             ## whisper-cli binaries
-            - `whisper-cpp-darwin-arm64.zip` - macOS Apple Silicon with Metal
-            - `whisper-cpp-darwin-x64.zip` - macOS Intel (CPU only)
+            - `whisper-cpp-darwin-arm64.zip` - macOS Apple Silicon (Metal + CoreML fallback)
+            - `whisper-cpp-darwin-x64.zip` - macOS Intel (CoreML + CPU fallback)
             - `whisper-cpp-win32-x64-cpu.zip` - Windows x64 CPU-only
             - `whisper-cpp-win32-x64-cuda.zip` - Windows x64 with CUDA (includes bundled CUDA DLLs)
             - `whisper-cpp-linux-x64-cpu.zip` - Linux x64 CPU-only
             - `whisper-cpp-linux-x64-cuda.zip` - Linux x64 with CUDA
 
             ## whisper-server binaries
-            - `whisper-server-darwin-arm64.zip` - macOS Apple Silicon with Metal
-            - `whisper-server-darwin-x64.zip` - macOS Intel (CPU only)
+            - `whisper-server-darwin-arm64.zip` - macOS Apple Silicon (Metal + CoreML fallback)
+            - `whisper-server-darwin-x64.zip` - macOS Intel (CoreML + CPU fallback)
             - `whisper-server-win32-x64-cpu.zip` - Windows x64 CPU-only
             - `whisper-server-win32-x64-cuda.zip` - Windows x64 with CUDA (includes bundled CUDA DLLs)
             - `whisper-server-linux-x64-cpu.zip` - Linux x64 CPU-only
