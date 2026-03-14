@@ -234,6 +234,7 @@ jobs:
           path: dist/whisper-server-win32-x64-cpu.zip
 
   build-windows-x64-cuda:
+    if: false
     runs-on: windows-2022
     steps:
       - name: Free up disk space
@@ -553,6 +554,7 @@ jobs:
           path: dist/whisper-server-linux-x64-cpu.zip
 
   build-linux-x64-cuda:
+    if: false
     runs-on: ubuntu-22.04
     steps:
       - name: Free up disk space
@@ -637,10 +639,13 @@ jobs:
         build-macos-arm64,
         build-macos-x64,
         build-windows-x64-cpu,
-        build-windows-x64-cuda,
+        
         build-linux-x64-cpu,
-        build-linux-x64-cuda,
-      ]
+        
+      
+        build-macos-arm64-coreml,
+        build-windows-x64-vulkan,
+        build-windows-x64-openvino,]
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
@@ -654,15 +659,18 @@ jobs:
           mv artifacts/whisper-cpp-darwin-arm64/whisper-cpp-darwin-arm64.zip release/
           mv artifacts/whisper-cpp-darwin-x64/whisper-cpp-darwin-x64.zip release/
           mv artifacts/whisper-cpp-win32-x64-cpu/whisper-cpp-win32-x64-cpu.zip release/
-          mv artifacts/whisper-cpp-win32-x64-cuda/whisper-cpp-win32-x64-cuda.zip release/
+          mv artifacts/whisper-cpp-win32-x64-cuda/whisper-cpp-win32-x64-cuda.zip release/ || true
           mv artifacts/whisper-cpp-linux-x64-cpu/whisper-cpp-linux-x64-cpu.zip release/
-          mv artifacts/whisper-cpp-linux-x64-cuda/whisper-cpp-linux-x64-cuda.zip release/
+          mv artifacts/whisper-cpp-linux-x64-cuda/whisper-cpp-linux-x64-cuda.zip release/ || true
           mv artifacts/whisper-server-darwin-arm64/whisper-server-darwin-arm64.zip release/
           mv artifacts/whisper-server-darwin-x64/whisper-server-darwin-x64.zip release/
           mv artifacts/whisper-server-win32-x64-cpu/whisper-server-win32-x64-cpu.zip release/
-          mv artifacts/whisper-server-win32-x64-cuda/whisper-server-win32-x64-cuda.zip release/
+          mv artifacts/whisper-server-win32-x64-cuda/whisper-server-win32-x64-cuda.zip release/ || true
           mv artifacts/whisper-server-linux-x64-cpu/whisper-server-linux-x64-cpu.zip release/
-          mv artifacts/whisper-server-linux-x64-cuda/whisper-server-linux-x64-cuda.zip release/
+          mv artifacts/whisper-server-linux-x64-cuda/whisper-server-linux-x64-cuda.zip release/ || true
+          mv artifacts/whisper-server-darwin-arm64-coreml/whisper-server-darwin-arm64-coreml.zip release/ || true
+          mv artifacts/whisper-server-win32-x64-vulkan/whisper-server-win32-x64-vulkan.zip release/ || true
+          mv artifacts/whisper-server-win32-x64-openvino/whisper-server-win32-x64-openvino.zip release/ || true
           ls -la release/
 
       - name: Create SHA256 checksums
