@@ -37,7 +37,7 @@ jobs:
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DWHISPER_METAL=ON \
             -DGGML_METAL=ON \
-            -DWHISPER_COREML=ON \
+            -DWHISPER_COREML=OFF \
             -DWHISPER_COREML_ALLOW_FALLBACK=ON \
             -DBUILD_SHARED_LIBS=OFF
           cmake --build build --config Release -j "$(sysctl -n hw.logicalcpu)"
@@ -70,6 +70,51 @@ jobs:
           name: whisper-server-darwin-arm64
           path: dist/whisper-server-darwin-arm64.zip
 
+
+  build-macos-arm64-coreml:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: macos-arm64-coreml
+
+      - name: Build whisper.cpp (CoreML)
+        run: |
+          cmake -S . -B build             -DCMAKE_BUILD_TYPE=Release             -DCMAKE_C_COMPILER_LAUNCHER=ccache             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache             -DWHISPER_METAL=ON             -DGGML_METAL=ON             -DWHISPER_COREML=ON             -DWHISPER_COREML_ALLOW_FALLBACK=ON             -DBUILD_SHARED_LIBS=OFF
+          cmake --build build --config Release -j "$(sysctl -n hw.logicalcpu)"
+
+      - name: Verify CoreML linkage
+        run: |
+          otool -L build/bin/whisper-server | grep -i CoreML
+
+      - name: Package binaries
+        run: |
+          mkdir -p dist
+          cp build/bin/whisper-cli dist/whisper-cpp-darwin-arm64-coreml
+          chmod +x dist/whisper-cpp-darwin-arm64-coreml
+          cp build/bin/whisper-server dist/whisper-server-darwin-arm64-coreml
+          chmod +x dist/whisper-server-darwin-arm64-coreml
+          cp LICENSE dist/ || true
+          cd dist
+          zip -r whisper-cpp-darwin-arm64-coreml.zip whisper-cpp-darwin-arm64-coreml LICENSE
+          zip -r whisper-server-darwin-arm64-coreml.zip whisper-server-darwin-arm64-coreml LICENSE
+
+      - name: Upload whisper-cli artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-cpp-darwin-arm64-coreml
+          path: dist/whisper-cpp-darwin-arm64-coreml.zip
+
+      - name: Upload whisper-server artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-server-darwin-arm64-coreml
+          path: dist/whisper-server-darwin-arm64-coreml.zip
+
   build-macos-x64:
     runs-on: macos-14  # Cross-compile for x64 on arm64 runner
     steps:
@@ -94,7 +139,7 @@ jobs:
             -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 \
             -DWHISPER_METAL=OFF \
             -DGGML_METAL=OFF \
-            -DWHISPER_COREML=ON \
+            -DWHISPER_COREML=OFF \
             -DWHISPER_COREML_ALLOW_FALLBACK=ON \
             -DGGML_NATIVE=OFF \
             -DGGML_BLAS=OFF \
@@ -323,6 +368,125 @@ jobs:
           name: whisper-server-win32-x64-cuda
           path: dist/whisper-server-win32-x64-cuda.zip
 
+
+  build-windows-x64-vulkan:
+    runs-on: windows-2022
+    steps:
+      - name: Free up disk space
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force "C:\hostedtoolcache\CodeQL" -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force "C:\hostedtoolcache\Java*" -ErrorAction SilentlyContinue
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Ninja
+        run: choco install ninja -y
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: windows-x64-vulkan
+          variant: sccache
+
+      - name: Build whisper.cpp (Vulkan)
+        shell: cmd
+        run: |
+          cmake -S . -B build -G "Ninja Multi-Config" ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache ^
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache ^
+            -DBUILD_SHARED_LIBS=OFF ^
+            -DGGML_NATIVE=OFF ^
+            -DGGML_VULKAN=ON
+          cmake --build build --config Release -j %NUMBER_OF_PROCESSORS%
+
+      - name: Package binaries
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item build\bin\Release\whisper-cli.exe dist\whisper-cpp-win32-x64-vulkan.exe
+          Copy-Item build\bin\Release\whisper-server.exe dist\whisper-server-win32-x64-vulkan.exe
+          if (Test-Path LICENSE) { Copy-Item LICENSE dist\LICENSE.txt }
+          cd dist
+          Compress-Archive -Path * -DestinationPath whisper-cpp-win32-x64-vulkan.zip
+          Compress-Archive -Path whisper-server-win32-x64-vulkan.exe, LICENSE.txt -DestinationPath whisper-server-win32-x64-vulkan.zip
+
+      - name: Upload whisper-cli artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-cpp-win32-x64-vulkan
+          path: dist/whisper-cpp-win32-x64-vulkan.zip
+
+      - name: Upload whisper-server artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-server-win32-x64-vulkan
+          path: dist/whisper-server-win32-x64-vulkan.zip
+
+
+  build-windows-x64-openvino:
+    runs-on: windows-2022
+    steps:
+      - name: Free up disk space
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force "C:\hostedtoolcache\CodeQL" -ErrorAction SilentlyContinue
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Ninja
+        run: choco install ninja -y
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: windows-x64-openvino
+          variant: sccache
+
+      - name: Build whisper.cpp (OpenVINO)
+        shell: cmd
+        run: |
+          cmake -S . -B build -G "Ninja Multi-Config" ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache ^
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache ^
+            -DBUILD_SHARED_LIBS=OFF ^
+            -DGGML_NATIVE=OFF ^
+            -DGGML_OPENVINO=ON
+          cmake --build build --config Release -j %NUMBER_OF_PROCESSORS%
+
+      - name: Package binaries
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item build\bin\Release\whisper-cli.exe dist\whisper-cpp-win32-x64-openvino.exe
+          Copy-Item build\bin\Release\whisper-server.exe dist\whisper-server-win32-x64-openvino.exe
+          if (Test-Path LICENSE) { Copy-Item LICENSE dist\LICENSE.txt }
+          cd dist
+          Compress-Archive -Path * -DestinationPath whisper-cpp-win32-x64-openvino.zip
+          Compress-Archive -Path whisper-server-win32-x64-openvino.exe, LICENSE.txt -DestinationPath whisper-server-win32-x64-openvino.zip
+
+      - name: Upload whisper-cli artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-cpp-win32-x64-openvino
+          path: dist/whisper-cpp-win32-x64-openvino.zip
+
+      - name: Upload whisper-server artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-server-win32-x64-openvino
+          path: dist/whisper-server-win32-x64-openvino.zip
+
   build-linux-x64-cpu:
     runs-on: ubuntu-22.04
     steps:
@@ -536,7 +700,10 @@ jobs:
             - `whisper-server-darwin-arm64.zip` - macOS Apple Silicon (Metal + CoreML fallback)
             - `whisper-server-darwin-x64.zip` - macOS Intel (CoreML + CPU fallback)
             - `whisper-server-win32-x64-cpu.zip` - Windows x64 CPU-only
-            - `whisper-server-win32-x64-cuda.zip` - Windows x64 with CUDA (includes bundled CUDA DLLs)
+            - `whisper-server-darwin-arm64-coreml.zip` - macOS Apple Silicon (CoreML Optimized)
+            - `whisper-server-win32-x64-vulkan.zip` - Windows x64 with Vulkan (AMD/Generic GPU)
+            - `whisper-server-win32-x64-openvino.zip` - Windows x64 with OpenVINO (Intel GPU)
+            - `whisper-server-win32-x64-cuda.zip` - Windows x64 with CUDA (NVIDIA GPU)
             - `whisper-server-linux-x64-cpu.zip` - Linux x64 CPU-only
             - `whisper-server-linux-x64-cuda.zip` - Linux x64 with CUDA
 
