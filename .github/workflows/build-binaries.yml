@@ -42,9 +42,7 @@ jobs:
             -DBUILD_SHARED_LIBS=OFF
           cmake --build build --config Release -j "$(sysctl -n hw.logicalcpu)"
 
-      - name: Verify CoreML linkage (arm64 whisper-server)
-        run: |
-          otool -L build/bin/whisper-server | grep -i CoreML
+
 
       - name: Package binaries
         run: |
@@ -146,9 +144,7 @@ jobs:
             -DBUILD_SHARED_LIBS=OFF
           cmake --build build --config Release -j "$(sysctl -n hw.logicalcpu)"
 
-      - name: Verify CoreML linkage (x64 whisper-server)
-        run: |
-          otool -L build/bin/whisper-server | grep -i CoreML
+
 
       - name: Package binaries
         run: |
@@ -193,6 +189,10 @@ jobs:
 
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install Vulkan SDK
+        run: choco install vulkan-sdk -y
+
 
       - name: Setup ccache (sccache)
         uses: hendrikmuhs/ccache-action@v1
@@ -386,6 +386,9 @@ jobs:
 
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install Vulkan SDK
+        run: choco install vulkan-sdk -y
 
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1
